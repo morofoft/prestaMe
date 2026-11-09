@@ -1,0 +1,25 @@
+{
+    "name": "PrestaControl",
+    "short_name": "Presta",
+    "description": "Gestión de préstamos personales",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "background_color": "#0b1220",
+    "theme_color": "#0b1220",
+    "orientation": "portrait",
+    "lang": "es-DO",
+    "icons": [
+      {
+        "src": "https://cdn-icons-png.flaticon.com/192/2489/2489756.png",
+        "sizes": "192x192",
+        "type": "image/png",
+        "purpose": "any maskable"
+      },
+      {
+        "src": "https://cdn-icons-png.flaticon.com/512/2489/2489756.png",
+        "sizes": "512x512",
+        "type": "image/png",
+        "purpose": "any maskable"
+      }
+    ]
+  }

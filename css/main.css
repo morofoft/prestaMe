@@ -1,0 +1,84 @@
+:root {
+    --safeB: env(safe-area-inset-bottom);
+    --safeT: env(safe-area-inset-top);
+    color-scheme: light dark;
+}
+
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html, body { height: 100%; }
+
+body {
+    margin: 0;
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+}
+
+.hidden { display: none !important; }
+
+/* ⬇️ FIX: bloquear scroll de fondo cuando hay modal abierto */
+body.noscroll { overflow: hidden; }
+
+/* Scroll horizontal invisible en pills */
+.pill { scrollbar-width: none; }
+.pill::-webkit-scrollbar { display: none; }
+
+/* Quitar border del último item de listas */
+.kv:last-child,
+.cuota:last-child,
+.remind-item:last-child { border-bottom: 0; }
+
+/* ====== IMPRESIÓN PAGARÉ ====== */
+#print-area { display: none; }
+
+@media print {
+    @page { size: A4; margin: 2cm 2.2cm; }
+    body.printing > *:not(#print-area) { display: none !important; }
+    body.printing #print-area {
+        display: block !important;
+        background: #fff !important;
+        color: #111 !important;
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: 12pt;
+        line-height: 1.55;
+    }
+    body.printing { background: #fff !important; }
+}
+
+/* ── SweetAlert2: tema claro/oscuro automático ─── */
+:root {
+    --swal-bg: #ffffff;        --swal-fg: #0f172a;
+    --swal-input-bg: #f8fafc;  --swal-input-fg: #0f172a;
+    --swal-border: #e2e8f0;
+  }
+  [data-theme="dark"] {
+    --swal-bg: #0f172a;        --swal-fg: #f1f5f9;
+    --swal-input-bg: #1e293b;  --swal-input-fg: #f1f5f9;
+    --swal-border: #334155;
+  }
+  @media (prefers-color-scheme:dark) {
+    :root:not([data-theme="light"]) {
+      --swal-bg: #0f172a;        --swal-fg: #f1f5f9;
+      --swal-input-bg: #1e293b;  --swal-input-fg: #f1f5f9;
+      --swal-border: #669de9;
+    }
+  }
+  .swal2-popup,
+  .swal2-title,
+  .swal2-html-container { color: var(--swal-fg) !important; background: var(--swal-bg) !important; }
+  .swal2-input,
+  .swal2-textarea,
+  .swal2-select {
+    background: var(--swal-input-bg) !important;
+    color: var(--swal-input-fg) !important;
+    border-color: var(--swal-border) !important;
+  }
+  .swal2-styled.swal2-cancel {
+    background: var(--swal-input-bg) !important;
+    color: var(--swal-input-fg) !important;
+    border: 1px solid var(--swal-border) !important;
+  }
+  .swal2-toast { box-shadow: 0 10px 24px rgba(0,0,0,.18) !important; }
