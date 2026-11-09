@@ -1,4 +1,4 @@
-const CACHE_NAME = 'prestacontrol-v3';   // ⬅️ bump para invalidar viejo
+const CACHE_NAME = 'PrestaMe-v3';   // ⬅️ bump para invalidar viejo
 const ASSETS = [
   './',
   './index.html',

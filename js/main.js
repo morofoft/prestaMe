@@ -1,7 +1,7 @@
 /* =========================================================
    UTILIDADES
    ========================================================= */
-   const DB_KEY='prestacontrol_v1';
+   const DB_KEY='PrestaMe_v1';
    const $=(s,r=document)=>r.querySelector(s);
    const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
    const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4);
@@ -694,7 +694,7 @@ function devFooter(){
    
      <div class="card" id="cardInstalar" style="display:none">
        <h3 class="font-bold">Instalar App</h3>
-       <p class="text-xs text-slate-500 my-1">Añade PrestaControl a tu pantalla de inicio para usarla sin internet.</p>
+       <p class="text-xs text-slate-500 my-1">Añade PrestaMe a tu pantalla de inicio para usarla sin internet.</p>
        <button class="btn primary w-full mt-2" onclick="instalarApp()">📲 Instalar en mi teléfono</button>
      </div>
    
@@ -748,7 +748,7 @@ function devFooter(){
        <div style="margin-top:12px"><button class="btn danger" onclick="borrarTodo()">Borrar todos los datos</button></div>
      </div>
    
-     <p class="text-[11px] text-slate-400 text-center mt-4">PrestaControl · DOP · v3.0</p>`;
+     <p class="text-[11px] text-slate-400 text-center mt-4">PrestaMe · DOP · v3.0</p>`;
    }
    
    function setTema(t){localStorage.setItem('pc_theme',t);aplicarTema();render();buzz();}
@@ -1199,7 +1199,7 @@ function devFooter(){
            <div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Total a pagar</span><b>${money(r.total)}</b></div>
            <div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Pagado acumulado</span><b>${money(r.pag)}</b></div>
            <div class="flex justify-between py-1.5 text-xs"><span>Saldo actual</span><b style="color:${r.saldo>0?'#dc2626':'#16a34a'}">${money(r.saldo)}</b></div>
-           <div class="text-center mt-3 text-[11px] text-slate-400 italic">Gracias por su pago · PrestaControl</div>
+           <div class="text-center mt-3 text-[11px] text-slate-400 italic">Gracias por su pago · PrestaMe</div>
          </div>
          <p class="text-xs text-slate-500 text-center my-3">
            Comparte el recibo con tu cliente por WhatsApp.
@@ -1232,7 +1232,7 @@ function devFooter(){
    ${r.mora>0?`• Mora acum.: ${money(r.mora)}\n`:''}
    ${line}
    Gracias por su pago 🙏
-   _PrestaControl_`;
+   _PrestaMe_`;
    }
    
    async function compartirRecibo(pagoId){
@@ -1484,7 +1484,7 @@ function devFooter(){
    *Firma del acreedor:* ______________________
    ${(cred.nombre||'').toUpperCase()}${cred.cedula?`\nCédula: ${cred.cedula}`:''}
    ${L}
-   _PrestaControl_`;
+   _PrestaMe_`;
    }
    
    function compartirPagareTexto(prestamoId){
@@ -1543,7 +1543,7 @@ function devFooter(){
      setTimeout(()=>URL.revokeObjectURL(a.href),1500);
    }
    function exportarJSON(){
-     descargar('prestacontrol-'+hoyISO()+'.json',JSON.stringify(db,null,2),'application/json');
+     descargar('PrestaMe-'+hoyISO()+'.json',JSON.stringify(db,null,2),'application/json');
      toast('Respaldo descargado');
    }
    function toCSV(rows){
@@ -1560,7 +1560,7 @@ function devFooter(){
        const p=db.prestamos.find(x=>x.id===g.prestamoId);
        fg.push([p?personaDe(p.personaId).nombre:'—',g.fecha,g.monto,g.nota||'']);
      });
-     descargar('prestacontrol-'+hoyISO()+'.csv',
+     descargar('PrestaMe-'+hoyISO()+'.csv',
        'PRESTAMOS\r\n'+toCSV(fp)+'\r\n\r\nPAGOS\r\n'+toCSV(fg),'text/csv;charset=utf-8');
      toast('CSV descargado');
    }
@@ -1602,7 +1602,7 @@ function devFooter(){
      const icon='data:image/svg+xml;utf8,'+encodeURIComponent(
        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#2563eb"/><text x="256" y="330" font-size="240" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold">RD$</text></svg>');
      const manifest={
-       name:'PrestaControl',short_name:'Presta',start_url:'.',scope:'.',
+       name:'PrestaMe',short_name:'Presta',start_url:'.',scope:'.',
        display:'standalone',background_color:'#0b1220',theme_color:'#0b1220',
        lang:'es',orientation:'portrait',
        icons:[{src:icon,sizes:'512x512',type:'image/svg+xml',purpose:'any'}]
