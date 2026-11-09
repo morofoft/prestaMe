@@ -82,3 +82,27 @@ body.noscroll { overflow: hidden; }
     border: 1px solid var(--swal-border) !important;
   }
   .swal2-toast { box-shadow: 0 10px 24px rgba(0,0,0,.18) !important; }
+
+  /* ── Logo animado (barras) ───────────────── */
+@keyframes svgRainbow {
+  0%   { fill: #2563eb; }
+  20%  { fill: #7c3aed; }
+  40%  { fill: #db2777; }
+  60%  { fill: #f59e0b; }
+  80%  { fill: #10b981; }
+  100% { fill: #2563eb; }
+}
+
+.animate-svg-rainbow rect {
+  fill: #2563eb;
+  animation: svgRainbow 6s linear infinite;
+}
+.animate-svg-rainbow rect:nth-child(1) { animation-delay: 0s;    }
+.animate-svg-rainbow rect:nth-child(2) { animation-delay: 0.35s; }
+.animate-svg-rainbow rect:nth-child(3) { animation-delay: 0.70s; }
+.animate-svg-rainbow rect:nth-child(4) { animation-delay: 1.05s; }
+.animate-svg-rainbow rect:nth-child(5) { animation-delay: 1.40s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-svg-rainbow rect { animation: none; fill: currentColor; }
+}

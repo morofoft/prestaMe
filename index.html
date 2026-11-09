@@ -1,38 +1,52 @@
 <!doctype html>
 <html lang="es">
+
 <head>
-<meta charset="utf-8"/>
-<link rel="manifest" href="./manifest.json">
-<link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2489/2489756.png">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"/>
-<meta name="theme-color" content="#0b1220"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="format-detection" content="telephone=no"/>
-<title>PrestaMe</title>
+  <meta charset="utf-8" />
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2489/2489756.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="format-detection" content="telephone=no" />
+  <title>PrestaMe</title>
 
-<!-- ⬇️ FAVICONS -->
-<link rel="icon" type="image/svg+xml"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%232563eb'/%3E%3Ctext x='256' y='345' font-size='220' text-anchor='middle' fill='%23fff' font-family='Arial,sans-serif' font-weight='bold'%3ERD$%3C/text%3E%3C/svg%3E">
-<link rel="icon" type="image/png" sizes="192x192"
-      href="https://cdn-icons-png.flaticon.com/192/2489/2489756.png">
-<link rel="icon" type="image/png" sizes="512x512"
-      href="https://cdn-icons-png.flaticon.com/512/2489/2489756.png">
-<link rel="apple-touch-icon" sizes="192x192"
-      href="https://cdn-icons-png.flaticon.com/512/2489/2489756.png">
+  <!-- FontAwesome 6 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css">
 
 
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    darkMode: ['selector', '[data-theme="dark"]'],
-    theme: { extend: { colors: { primary: '#2563eb' } } }
+  <!-- ⬇️ FAVICONS -->
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 130 130'%3E%3Crect width='130' height='130' rx='26' fill='%232563eb'/%3E%3Cg fill='%23fff' transform='translate(26.55,15) scale(0.7692)'%3E%3Crect x='0' y='0' width='18' height='130' rx='4'/%3E%3Crect x='26' y='0' width='18' height='70' rx='4'/%3E%3Crect x='52' y='0' width='18' height='130' rx='4'/%3E%3Crect x='78' y='0' width='18' height='38' rx='4'/%3E%3Crect x='78' y='68' width='18' height='62' rx='4'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2489/2489756.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: ['selector', '[data-theme="dark"]'],
+      theme: { extend: { colors: { primary: '#2563eb' } } }
+    }
+  </script>
+
+  <!-- ⬇️ AQUÍ VA TODO LO QUE USA @apply (sí funciona con Play CDN) -->
+  <style type="text/tailwindcss">
+    @layer components {
+/* ── Grid utilitario (KPIs + pares de campos) ─ */
+.gridk {
+  @apply grid grid-cols-2 gap-2.5;
+}
+
+/* Solo el grid de KPIs del dashboard recibe margen inferior
+   y pasa a 3 columnas en pantallas anchas */
+.gridk:has(> .kpi) {
+  @apply mb-3;
+}
+@media (min-width: 560px) {
+  .gridk:has(> .kpi) {
+    @apply grid-cols-3;
   }
-</script>
-
-<!-- ⬇️ AQUÍ VA TODO LO QUE USA @apply (sí funciona con Play CDN) -->
-<style type="text/tailwindcss">
-@layer components {
+}
   /* ── Cards ─────────────────────────────────── */
   .card { @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm mb-3; }
 
@@ -125,62 +139,117 @@
 }
 </style>
 
-<link rel="stylesheet" href="./css/main.css">
-<!-- SweetAlert2 -->
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="./css/main.css">
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 </head>
-<body class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased h-full overscroll-y-none">
 
-<!-- LOCK (sin cambios) -->
-<div id="lock" class="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[radial-gradient(1200px_500px_at_50%_-10%,rgba(37,99,235,.22),transparent)] bg-slate-100 dark:bg-slate-950">
-  <div class="w-full max-w-[340px] text-center">
-    <div class="text-5xl leading-none"><i class="fas fa-user"></i></div>
-    <h1 class="mt-2 text-xl font-bold">PrestaMe</h1>
-    <p class="text-slate-500 dark:text-slate-400 text-sm" id="lockMsg">Ingresa tu PIN</p>
-    <input id="pin1" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" maxlength="8"
-           class="w-full mt-2.5 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center tracking-[8px] text-xl font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
-    <input id="pin2" type="password" inputmode="numeric" autocomplete="off" placeholder="Repite el PIN" maxlength="8"
-           class="hidden w-full mt-2.5 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center tracking-[8px] text-xl font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
-    <button class="btn primary block w-full mt-3.5 py-3.5 px-4" id="lockBtn">Entrar</button>
-    <p class="text-xs text-slate-400 dark:text-slate-500 mt-3.5">Los datos se guardan solo en este dispositivo.</p>
-  </div>
-</div>
+<body
+  class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased h-full overscroll-y-none">
 
-<!-- APP -->
-<div id="app" class="hidden">
-  <header class="sticky top-0 z-20 flex items-center justify-between gap-2.5 px-3.5 pt-[calc(10px+env(safe-area-inset-top))] pb-2.5 bg-slate-100/90 dark:bg-slate-950/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-    <div class="font-extrabold tracking-tight text-sm flex items-center gap-1.5">💰 PrestaMe</div>
-    <div class="flex gap-1.5">
-      <button class="btn icon min-h-[44px] min-w-[44px] p-2 text-lg" onclick="ciclarTema()" id="btnTema" aria-label="Cambiar tema">🌗</button>
-      <button class="btn icon min-h-[44px] min-w-[44px] p-2 text-lg" onclick="lockApp()" aria-label="Bloquear">🔒</button>
+  <!-- LOCK (sin cambios) -->
+  <div id="lock"
+    class="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[radial-gradient(1200px_500px_at_50%_-10%,rgba(37,99,235,.22),transparent)] bg-slate-100 dark:bg-slate-950">
+    <div class="w-full max-w-[340px] text-center">
+      <div class="flex justify-center mb-1">
+        <svg class="w-16 h-20 animate-svg-rainbow" viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true">
+          <g>
+            <rect x="0" y="0" width="18" height="130" rx="4" />
+            <rect x="26" y="0" width="18" height="70" rx="4" />
+            <rect x="52" y="0" width="18" height="130" rx="4" />
+            <rect x="78" y="0" width="18" height="38" rx="4" />
+            <rect x="78" y="68" width="18" height="62" rx="4" />
+          </g>
+        </svg>
+      </div>
+      <h1 class="mt-2 text-xl font-bold">PrestaMe</h1>
+      <p class="text-slate-500 dark:text-slate-400 text-sm" id="lockMsg">Ingresa tu PIN</p>
+      <input id="pin1" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" maxlength="8"
+        class="w-full mt-2.5 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center tracking-[8px] text-xl font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      <input id="pin2" type="password" inputmode="numeric" autocomplete="off" placeholder="Repite el PIN" maxlength="8"
+        class="hidden w-full mt-2.5 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center tracking-[8px] text-xl font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      <button class="btn primary block w-full mt-3.5 py-3.5 px-4" id="lockBtn">Entrar</button>
+      <p class="text-xs text-slate-400 dark:text-slate-500 mt-3.5">Los datos se guardan solo en este dispositivo.</p>
     </div>
-  </header>
-
-  <main id="view" class="p-3.5 pb-[calc(64px+24px+env(safe-area-inset-bottom))] max-w-[900px] mx-auto"></main>
-
-  <button class="fab fixed right-4 bottom-[calc(64px+16px+env(safe-area-inset-bottom))] w-[58px] h-[58px] rounded-full border-none bg-blue-600 text-white text-3xl font-light leading-none shadow-[0_10px_26px_rgba(37,99,235,.45),0_2px_6px_rgba(37,99,235,.3)] z-30 flex items-center justify-center transition active:scale-95" id="fab" onclick="toggleFab(event)" aria-label="Acciones">+</button>
-
-  <div class="hidden fixed right-4 bottom-[calc(64px+84px+env(safe-area-inset-bottom))] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-1.5 z-30 min-w-[220px]" id="fabMenu">
-    <button class="flex items-center gap-3 w-full p-3 bg-transparent text-slate-900 dark:text-slate-100 rounded-xl font-semibold text-base text-left min-h-[48px] active:bg-blue-50 dark:active:bg-blue-950/30" onclick="fabAction('prestamo')"><span class="text-xl">📄</span> Nuevo préstamo</button>
-    <button class="flex items-center gap-3 w-full p-3 bg-transparent text-slate-900 dark:text-slate-100 rounded-xl font-semibold text-base text-left min-h-[48px] active:bg-blue-50 dark:active:bg-blue-950/30" onclick="fabAction('persona')"><span class="text-xl">👤</span> Nueva persona</button>
-    <button class="flex items-center gap-3 w-full p-3 bg-transparent text-slate-900 dark:text-slate-100 rounded-xl font-semibold text-base text-left min-h-[48px] active:bg-blue-50 dark:active:bg-blue-950/30" onclick="fabAction('pago')"><span class="text-xl">💵</span> Registrar pago</button>
   </div>
 
-  <nav class="tabs fixed left-0 right-0 bottom-0 z-20 grid grid-cols-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 pb-[env(safe-area-inset-bottom)] h-[calc(64px+env(safe-area-inset-bottom))]">
-    <button class="relative flex flex-col items-center justify-center gap-0.5 p-2 text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold h-[64px]" data-tab="panel" onclick="setTab('panel')"><span class="text-xl leading-none">📊</span><span>Panel</span></button>
-    <button class="relative flex flex-col items-center justify-center gap-0.5 p-2 text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold h-[64px]" data-tab="prestamos" onclick="setTab('prestamos')"><span class="text-xl leading-none">📄</span><span>Préstamos</span></button>
-    <button class="relative flex flex-col items-center justify-center gap-0.5 p-2 text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold h-[64px]" data-tab="personas" onclick="setTab('personas')"><span class="text-xl leading-none">👥</span><span>Personas</span></button>
-    <button class="relative flex flex-col items-center justify-center gap-0.5 p-2 text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold h-[64px]" data-tab="ajustes" onclick="setTab('ajustes')"><span class="text-xl leading-none">⚙️</span><span>Ajustes</span></button>
-  </nav>
+  <!-- APP -->
+  <div id="app" class="hidden">
+    <header
+      class="sticky top-0 z-20 flex items-center justify-between gap-2.5 px-3.5 pt-[calc(10px+env(safe-area-inset-top))] pb-2.5 bg-slate-100/90 dark:bg-slate-950/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+      <div class="font-extrabold tracking-tight text-sm flex items-center gap-1.5">
+        <svg class="w-5 h-6 animate-svg-rainbow" viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true">
+          <g>
+            <rect x="0" y="0" width="18" height="130" rx="4" />
+            <rect x="26" y="0" width="18" height="70" rx="4" />
+            <rect x="52" y="0" width="18" height="130" rx="4" />
+            <rect x="78" y="0" width="18" height="38" rx="4" />
+            <rect x="78" y="68" width="18" height="62" rx="4" />
+          </g>
+        </svg>
+        PrestaMe
+      </div>
+      <div class="flex gap-1.5">
+        <button class="btn icon min-h-[44px] min-w-[44px] p-2 text-lg" onclick="ciclarTema()" id="btnTema"
+          aria-label="Cambiar tema"><i class="fa-solid fa-circle-half-stroke"></i></button>
+        <button class="btn icon min-h-[44px] min-w-[44px] p-2 text-lg" onclick="lockApp()" aria-label="Bloquear"><i
+            class="fas fa-lock"></i></button>
+      </div>
+    </header>
+
+    <main id="view" class="p-3.5 pb-[calc(64px+24px+env(safe-area-inset-bottom))] max-w-[900px] mx-auto"></main>
+
+    <button
+      class="fab fixed right-4 bottom-[calc(64px+16px+env(safe-area-inset-bottom))] w-[58px] h-[58px] rounded-full border-none bg-blue-600 text-white text-3xl font-light leading-none shadow-[0_10px_26px_rgba(37,99,235,.45),0_2px_6px_rgba(37,99,235,.3)] z-30 flex items-center justify-center transition active:scale-95"
+      id="fab" onclick="toggleFab(event)" aria-label="Acciones">+</button>
+
+<div class="hidden fixed right-4 bottom-[calc(64px+84px+env(safe-area-inset-bottom))] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-1.5 z-30 min-w-[220px]" id="fabMenu">
+  <button class="flex items-center gap-3 w-full p-3 bg-transparent text-slate-900 dark:text-slate-100 rounded-xl font-semibold text-base text-left min-h-[48px] active:bg-blue-50 dark:active:bg-blue-950/30" onclick="fabAction('prestamo')">
+    <i class="fa-solid fa-file-invoice-dollar w-6 text-center text-xl text-blue-600"></i> Nuevo préstamo
+  </button>
+  <button class="flex items-center gap-3 w-full p-3 bg-transparent text-slate-900 dark:text-slate-100 rounded-xl font-semibold text-base text-left min-h-[48px] active:bg-blue-50 dark:active:bg-blue-950/30" onclick="fabAction('persona')">
+    <i class="fa-solid fa-user-plus w-6 text-center text-xl text-emerald-600"></i> Nueva persona
+  </button>
+  <button class="flex items-center gap-3 w-full p-3 bg-transparent text-slate-900 dark:text-slate-100 rounded-xl font-semibold text-base text-left min-h-[48px] active:bg-blue-50 dark:active:bg-blue-950/30" onclick="fabAction('pago')">
+    <i class="fa-solid fa-hand-holding-dollar w-6 text-center text-xl text-green-600"></i> Registrar pago
+  </button>
 </div>
 
-<div id="modal" class="hidden fixed inset-0 z-40 bg-slate-950/55 flex items-end sm:items-center justify-center backdrop-blur-sm" onclick="if(event.target===this)closeModal()">
-  <div class="bg-white dark:bg-slate-900 w-full max-w-[560px] max-h-[92vh] sm:max-h-[88vh] flex flex-col rounded-t-[20px] sm:rounded-[20px] overflow-hidden" id="modalBox"></div>
-</div>
+    <nav
+      class="tabs fixed left-0 right-0 bottom-0 z-20 grid grid-cols-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 pb-[env(safe-area-inset-bottom)] h-[calc(64px+env(safe-area-inset-bottom))]">
+      <button
+        class="relative flex flex-col items-center justify-center gap-0.5 p-2 text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold h-[64px]"
+        data-tab="panel" onclick="setTab('panel')"><i
+          class="fa-solid fa-chart-line text-xl leading-none"></i><span>Panel</span></button>
+      <button
+        class="relative flex flex-col items-center justify-center gap-0.5 p-2 text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold h-[64px]"
+        data-tab="prestamos" onclick="setTab('prestamos')"><i
+          class="fa-solid fa-file-invoice-dollar text-xl leading-none"></i><span>Préstamos</span></button>
+      <button
+        class="relative flex flex-col items-center justify-center gap-0.5 p-2 text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold h-[64px]"
+        data-tab="personas" onclick="setTab('personas')"><i
+          class="fa-solid fa-users text-xl leading-none"></i><span>Personas</span></button>
+      <button
+        class="relative flex flex-col items-center justify-center gap-0.5 p-2 text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold h-[64px]"
+        data-tab="ajustes" onclick="setTab('ajustes')"><i
+          class="fa-solid fa-gear text-xl leading-none"></i><span>Ajustes</span></button>
+    </nav>
+  </div>
 
-<div id="print-area"></div>
+  <div id="modal"
+    class="hidden fixed inset-0 z-40 bg-slate-950/55 flex items-end sm:items-center justify-center backdrop-blur-sm"
+    onclick="if(event.target===this)closeModal()">
+    <div
+      class="bg-white dark:bg-slate-900 w-full max-w-[560px] max-h-[92vh] sm:max-h-[88vh] flex flex-col rounded-t-[20px] sm:rounded-[20px] overflow-hidden"
+      id="modalBox"></div>
+  </div>
 
-<script src="./js/main.js"></script>
+  <div id="print-area"></div>
+
+  <script src="./js/main.js"></script>
 </body>
+
 </html>

@@ -22,6 +22,74 @@
    const numF=n=>new Intl.NumberFormat('es-DO',{maximumFractionDigits:2}).format(isFinite(n)?n:0);
    const buzz=()=>{try{navigator.vibrate&&navigator.vibrate(20);}catch(e){}};
    
+
+   /* ── Carga diferida de librerías PDF ─────────── */
+async function loadPDFLibs(){
+  if (window.jspdf && window.html2canvas) return;
+  await Promise.all([
+    new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    }),
+    new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    })
+  ]);
+}
+
+/* ── Convierte un elemento HTML en Blob PDF ──── */
+async function elementToPDFBlob(el){
+  await loadPDFLibs();
+  const clone = el.cloneNode(true);
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText =
+    'position:fixed;left:-9999px;top:0;background:#fff;color:#111;' +
+    'padding:40px;width:720px;font-family:system-ui,-apple-system,sans-serif;' +
+    'font-size:13px;line-height:1.5';
+  wrap.appendChild(clone);
+  document.body.appendChild(wrap);
+
+  let canvas;
+  try {
+    canvas = await html2canvas(wrap, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false,
+      onclone: (doc) => {
+        doc.documentElement.removeAttribute('data-theme');
+        doc.documentElement.style.colorScheme = 'light';
+      }
+    });
+  } finally {
+    document.body.removeChild(wrap);
+  }
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const imgData = canvas.toDataURL('image/jpeg', 0.92);
+  const imgW = pageW;
+  const imgH = (canvas.height * imgW) / canvas.width;
+
+  let heightLeft = imgH, position = 0;
+  pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+  heightLeft -= pageH;
+  while (heightLeft > 0){
+    position = heightLeft - imgH;
+    pdf.addPage();
+    pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+    heightLeft -= pageH;
+  }
+  return pdf.output('blob');
+}
    /* =========================================================
       STORAGE
       ========================================================= */
@@ -30,14 +98,65 @@
        const raw=localStorage.getItem(DB_KEY);
        if(raw){
          const d=JSON.parse(raw);
-         return {settings:Object.assign({pinHash:null,moraDefault:5,creditor:{nombre:'',cedula:'',ciudad:''}},d.settings||{}),
+         return {settings: Object.assign(
+          { pinHash: null, salt: null, moraDefault: 5,
+            creditor: { nombre: '', cedula: '', ciudad: '' } },
+          d.settings || {}
+        ),
                  personas:d.personas||[],prestamos:d.prestamos||[],pagos:d.pagos||[]};
        }
      }catch(e){console.warn('BD corrupta',e);}
-     return {settings:{pinHash:null,moraDefault:5,creditor:{nombre:'',cedula:'',ciudad:''}},personas:[],prestamos:[],pagos:[]};
+     return {
+      settings: { pinHash: null, salt: null, moraDefault: 5,
+                  creditor: { nombre: '', cedula: '', ciudad: '' } },
+      personas: [], prestamos: [], pagos: []
+    };
    }
    let db=loadDB();
    function saveDB(){try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){toast('⚠️ Sin espacio');}}
+   
+
+/* ── Compartir PDF del recibo de pago ────────── */
+async function compartirReciboPDF(pagoId){
+  const el = document.getElementById('recibo-preview');
+  if (!el) return toast('Abre el recibo primero');
+
+  const g = db.pagos.find(x => x.id === pagoId);
+  const p = g && db.prestamos.find(x => x.id === g.prestamoId);
+  const per = p ? personaDe(p.personaId) : { nombre: 'Cliente' };
+  const safe = (per.nombre || 'Cliente').replace(/[^\w]+/g, '_');
+  const fname = `Recibo_${safe}_${g?.fecha || hoyISO()}.pdf`;
+
+  try {
+    toast('Generando PDF…');
+    const blob = await elementToPDFBlob(el);
+    const file = new File([blob], fname, { type: 'application/pdf' });
+
+    // Share sheet nativo (Android / iOS / desktop con soporte)
+    if (navigator.canShare && navigator.canShare({ files: [file] })){
+      try{
+        await navigator.share({ files: [file], title: fname.replace('.pdf','') });
+        return;
+      }catch(e){
+        if (e.name === 'AbortError') return;   // usuario canceló
+      }
+    }
+
+    // Fallback: descarga directa
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    toast('PDF descargado');
+  } catch(err){
+    console.error(err);
+    toast('No se pudo generar el PDF');
+  }
+}
    
    /* =========================================================
       CÁLCULOS
@@ -123,7 +242,12 @@
      if(meta)meta.content=isDark?'#0b1220':'#f4f6fb';
    
      const btn=$('#btnTema');
-     if(btn)btn.textContent=t==='light'?'☀️':t==='dark'?'🌙':'🌗';
+if(btn){
+  const icon = t==='light' ? 'fa-sun'
+             : t==='dark'  ? 'fa-moon'
+             :               'fa-circle-half-stroke';
+  btn.innerHTML = `<i class="fa-solid ${icon}"></i>`;
+}
    }
    matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>{
      if((localStorage.getItem('pc_theme')||'auto')==='auto')aplicarTema();
@@ -137,21 +261,94 @@
    }
    aplicarTema();
    
-   /* =========================================================
-      PIN / SESIÓN
-      ========================================================= */
-   async function hashPin(pin){
-     const txt='pc::'+pin;
-     if(window.crypto&&crypto.subtle){
+/* =========================================================
+   PIN / SESIÓN
+   ========================================================= */
+   const PBKDF2_ITERATIONS = 200_000;
+   const PIN_MAX_INTENTOS  = 5;
+   const PIN_BLOQUEO_MS    = 30_000;
+   
+   let creandoPin     = false;
+   let pinFallos      = 0;
+   let pinBloqueadoHasta = 0;
+   
+   /* Salt único por instalación (16 bytes en hex) */
+   function ensureSalt(){
+     if(db.settings.salt) return db.settings.salt;
+     let salt;
+     if(window.crypto?.getRandomValues){
+       const arr = new Uint8Array(16);
+       crypto.getRandomValues(arr);
+       salt = Array.from(arr).map(x => x.toString(16).padStart(2,'0')).join('');
+     } else {
+       salt = Math.random().toString(36).slice(2) + Date.now().toString(36);
+     }
+     db.settings.salt = salt;
+     saveDB();
+     return salt;
+   }
+   
+   /* PBKDF2-SHA256 con 200k iteraciones → "pbkdf2:<hex>" */
+   async function derivePBKDF2(pin){
+     const salt = ensureSalt();
+     const enc  = new TextEncoder();
+     const keyMaterial = await crypto.subtle.importKey(
+       'raw', enc.encode(pin), 'PBKDF2', false, ['deriveBits']
+     );
+     const bits = await crypto.subtle.deriveBits(
+       { name: 'PBKDF2', salt: enc.encode('PrestaMe::' + salt),
+         iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+       keyMaterial, 256
+     );
+     const hex = Array.from(new Uint8Array(bits))
+       .map(x => x.toString(16).padStart(2,'0')).join('');
+     return 'pbkdf2:' + hex;
+   }
+   
+   /* Formato antiguo (compatibilidad con hashes ya guardados) */
+   async function deriveLegacy(pin){
+     const txt = 'pc::' + pin;
+     if(window.crypto?.subtle){
        try{
-         const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(txt));
-         return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,'0')).join('');
+         const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
+         return Array.from(new Uint8Array(h))
+           .map(x => x.toString(16).padStart(2,'0')).join('');
        }catch(e){}
      }
-     let h=5381;for(let i=0;i<txt.length;i++)h=((h<<5)+h+txt.charCodeAt(i))|0;
-     return 'f'+(h>>>0).toString(16);
+     let h = 5381;
+     for(let i = 0; i < txt.length; i++) h = ((h << 5) + h + txt.charCodeAt(i)) | 0;
+     return 'f' + (h >>> 0).toString(16);
    }
-   let creandoPin=false;
+   
+   /* Hash "actual" — prefiere PBKDF2, cae a legacy si no hay crypto.subtle */
+   async function hashPin(pin){
+     if(window.crypto?.subtle){
+       try{ return await derivePBKDF2(pin); }catch(e){}
+     }
+     return deriveLegacy(pin);
+   }
+   
+   /* Verifica + migra automáticamente hashes antiguos */
+   async function verificarPin(pin, stored){
+     if(!stored) return false;
+   
+     if(stored.startsWith('pbkdf2:')){
+       return (await hashPin(pin)) === stored;
+     }
+   
+     // Hash legado → verificar y migrar
+     if((await deriveLegacy(pin)) === stored){
+       try{
+         const nuevo = await hashPin(pin);
+         if(nuevo !== stored){
+           db.settings.pinHash = nuevo;
+           saveDB();
+         }
+       }catch(e){}
+       return true;
+     }
+     return false;
+   }
    
    /* =========================================================
       PWA INSTALL PROMPT
@@ -199,20 +396,54 @@
      }
    }
    async function intentarDesbloquear(){
-     const v1=$('#pin1').value.trim();
-     if(v1.length<4)return toast('El PIN debe tener al menos 4 dígitos');
-     if(creandoPin){
-       const v2=$('#pin2').value.trim();
-       if(v1!==v2)return toast('Los PIN no coinciden');
-       db.settings.pinHash=await hashPin(v1);saveDB();creandoPin=false;
-       sessionStorage.setItem('pc_unlocked','1');initLock();return;
-     }
-     if((await hashPin(v1))!==db.settings.pinHash){$('#pin1').value='';buzz();return toast('PIN incorrecto');}
-     sessionStorage.setItem('pc_unlocked','1');
-     $('#lock').classList.add('hidden');
-     $('#app').classList.remove('hidden');
-     render();
-   }
+    // Cooldown activo
+    if(Date.now() < pinBloqueadoHasta){
+      const segs = Math.ceil((pinBloqueadoHasta - Date.now()) / 1000);
+      return toast(`Espera ${segs}s antes de reintentar`);
+    }
+  
+    const v1 = $('#pin1').value.trim();
+    if(v1.length < 4) return toast('El PIN debe tener al menos 4 dígitos');
+  
+    /* ── Creación ── */
+    if(creandoPin){
+      const v2 = $('#pin2').value.trim();
+      if(v1 !== v2) return toast('Los PIN no coinciden');
+      db.settings.pinHash = await hashPin(v1);
+      saveDB();
+      creandoPin = false;
+      pinFallos  = 0;
+      sessionStorage.setItem('pc_unlocked', '1');
+      initLock();
+      return;
+    }
+  
+    /* ── Verificación ── */
+    const ok = await verificarPin(v1, db.settings.pinHash);
+    if(!ok){
+      pinFallos++;
+      $('#pin1').value = '';
+      buzz();
+      if(pinFallos >= PIN_MAX_INTENTOS){
+        pinBloqueadoHasta = Date.now() + PIN_BLOQUEO_MS;
+        pinFallos = 0;
+        const original = 'Ingresa tu PIN';
+        $('#lockMsg').innerHTML = '<i class="fa-solid fa-lock mr-1.5"></i>Bloqueado. Espera 30s.';
+        setTimeout(() => { $('#lockMsg').textContent = original; }, PIN_BLOQUEO_MS);
+        return toast('Demasiados intentos');
+      }
+      return toast(`PIN incorrecto (${PIN_MAX_INTENTOS - pinFallos} intentos)`);
+    }
+  
+    pinFallos = 0;
+    sessionStorage.setItem('pc_unlocked', '1');
+    $('#lock').classList.add('hidden');
+    $('#app').classList.remove('hidden');
+    render();
+  }
+
+
+
    function lockApp(){sessionStorage.removeItem('pc_unlocked');forceCloseModal();initLock();}
    $('#lockBtn').addEventListener('click',intentarDesbloquear);
    $('#pin1').addEventListener('keydown',e=>{if(e.key==='Enter')creandoPin?$('#pin2').focus():intentarDesbloquear();});
@@ -281,7 +512,7 @@
      return `
        <div class="modal-head">
          <h2>${title}</h2>
-         <button class="text-slate-400 hover:text-slate-600 text-xl p-1 leading-none rounded-lg" onclick="closeModal()" aria-label="Cerrar">✕</button>
+         <button class="text-slate-400 hover:text-slate-600 text-xl p-1 leading-none rounded-lg" onclick="closeModal()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
        </div>
        <div class="modal-body">${body}</div>
        ${foot?`<div class="modal-foot">${foot}</div>`:''}`;
@@ -331,14 +562,11 @@ function devFooter(){
       <span class="text-slate-300 dark:text-slate-700">·</span>
       <span>2026</span>
       <span class="text-slate-300 dark:text-slate-700">·</span>
-      <a href="${DEV_INSTAGRAM}"
-         target="_blank" rel="noopener noreferrer"
-         class="inline-flex items-center gap-1 font-semibold text-pink-500 hover:text-pink-600 dark:text-pink-400 dark:hover:text-pink-300 transition active:scale-95">
-        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-        </svg>
-        ${DEV_HANDLE}
-      </a>
+      <a href="${DEV_INSTAGRAM}" target="_blank" rel="noopener noreferrer"
+   class="inline-flex items-center gap-1 font-semibold text-pink-500 hover:text-pink-600 dark:text-pink-400 dark:hover:text-pink-300 transition active:scale-95">
+  <i class="fa-brands fa-instagram"></i>
+  ${DEV_HANDLE}
+</a>
     </div>
   </footer>`;
 }
@@ -428,7 +656,7 @@ function devFooter(){
      ${recTop.length?`
      <div class="card">
        <div class="row" style="margin-bottom:6px">
-         <h3 class="font-bold">📅 Recordatorios</h3>
+         <h3 class="font-bold"><i class="fa-solid fa-calendar-days mr-1.5 text-blue-600"></i>Recordatorios</h3>
          <span class="text-xs text-slate-500">${recTop.length}</span>
        </div>
        ${recTop.map(({p,c,dias})=>{
@@ -551,8 +779,8 @@ function devFooter(){
          return `
          <div class="swipe-wrap" data-id="${p.id}">
            <div class="swipe-actions">
-             <button class="edit" data-action="edit"><span class="ic">✎</span>Editar</button>
-             ${activo?`<button class="pay" data-action="pay"><span class="ic">$</span>Pagar</button>`:''}
+             <button class="edit" data-action="edit"><i class="fa-solid fa-pen text-base"></i>Editar</button>
+${activo?`<button class="pay" data-action="pay"><i class="fa-solid fa-hand-holding-dollar text-base"></i>Pagar</button>`:''}
            </div>
            <div class="swipe-card" onclick="openPrestamoDetalle('${p.id}')">
              <div class="row">
@@ -580,7 +808,8 @@ function devFooter(){
        el._swipeInit=true;
        const card=el.querySelector('.swipe-card');
        const actions=el.querySelector('.swipe-actions');
-       const actionWidth=actions.scrollWidth||140;
+       const actionWidth = [...actions.querySelectorAll('button')]
+  .reduce((s, b) => s + b.offsetWidth, 0) || 140;
        const maxLeft=-actionWidth;
        let startX=0,startY=0,curX=0,dragging=false,horiz=false,suppress=false;
    
@@ -686,16 +915,16 @@ function devFooter(){
        <h3 class="font-bold">Apariencia</h3>
        <p class="text-xs text-slate-500 my-2">Elige el tema de la app.</p>
        <div class="pill">
-         <button class="${tema==='auto'?'on':''}" onclick="setTema('auto')">🌗 Auto</button>
-         <button class="${tema==='light'?'on':''}" onclick="setTema('light')">☀️ Claro</button>
-         <button class="${tema==='dark'?'on':''}" onclick="setTema('dark')">🌙 Oscuro</button>
+         <button class="${tema==='auto'?'on':''}" onclick="setTema('auto')"><i class="fa-solid fa-circle-half-stroke mr-1"></i>Auto</button>
+<button class="${tema==='light'?'on':''}" onclick="setTema('light')"><i class="fa-solid fa-sun mr-1"></i>Claro</button>
+<button class="${tema==='dark'?'on':''}" onclick="setTema('dark')"><i class="fa-solid fa-moon mr-1"></i>Oscuro</button>
        </div>
      </div>
    
      <div class="card" id="cardInstalar" style="display:none">
        <h3 class="font-bold">Instalar App</h3>
        <p class="text-xs text-slate-500 my-1">Añade PrestaMe a tu pantalla de inicio para usarla sin internet.</p>
-       <button class="btn primary w-full mt-2" onclick="instalarApp()">📲 Instalar en mi teléfono</button>
+       <button class="btn primary w-full mt-2" onclick="instalarApp()"><i class="fa-solid fa-mobile-screen-button mr-1.5"></i>Instalar en mi teléfono</button>
      </div>
    
      <div class="card">
@@ -732,9 +961,9 @@ function devFooter(){
        <h3 class="font-bold">Respaldo</h3>
        <p class="text-xs text-slate-500 my-1">Guarda el respaldo con frecuencia. Si borras datos del navegador, se pierde todo.</p>
        <div class="row wrap gap-2 mt-2">
-         <button class="btn" onclick="exportarJSON()">⬇ JSON</button>
-         <button class="btn" onclick="document.getElementById('impFile').click()">⬆ Importar</button>
-         <button class="btn" onclick="exportarCSV()">📄 CSV</button>
+        <button class="btn" onclick="exportarJSON()"><i class="fa-solid fa-download mr-1.5"></i>JSON</button>
+<button class="btn" onclick="document.getElementById('impFile').click()"><i class="fa-solid fa-upload mr-1.5"></i>Importar</button>
+<button class="btn" onclick="exportarCSV()"><i class="fa-solid fa-file-csv mr-1.5"></i>CSV</button>
        </div>
        <input type="file" id="impFile" accept=".json,application/json" class="hidden" onchange="importarJSON(this)"/>
      </div>
@@ -759,31 +988,41 @@ function devFooter(){
    }
    
    async function borrarTodo(){
-     const r1 = await Swal.fire({
-       icon:'warning',
-       title:'¿Borrar TODOS los datos?',
-       text:'No se puede deshacer.',
-       showCancelButton:true,
-       confirmButtonText:'Continuar',
-       confirmButtonColor:'#dc2626',
-       cancelButtonText:'Cancelar'
-     });
-     if(!r1.isConfirmed) return;
-   
-     const r2 = await Swal.fire({
-       icon:'error',
-       title:'Confirma otra vez',
-       text:'Se eliminarán personas, préstamos y pagos.',
-       showCancelButton:true,
-       confirmButtonText:'Sí, borrar todo',
-       confirmButtonColor:'#dc2626',
-       cancelButtonText:'Cancelar'
-     });
-     if(!r2.isConfirmed) return;
-   
-     db={settings:{pinHash:db.settings.pinHash,moraDefault:5,creditor:{nombre:'',cedula:'',ciudad:''}},personas:[],prestamos:[],pagos:[]};
-     saveDB();render();toast('Datos borrados');
-   }
+    const r1 = await Swal.fire({
+      icon:'warning',
+      title:'¿Borrar TODOS los datos?',
+      text:'No se puede deshacer.',
+      showCancelButton:true,
+      confirmButtonText:'Continuar',
+      confirmButtonColor:'#dc2626',
+      cancelButtonText:'Cancelar'
+    });
+    if(!r1.isConfirmed) return;
+  
+    const r2 = await Swal.fire({
+      icon:'error',
+      title:'Confirma otra vez',
+      text:'Se eliminarán personas, préstamos y pagos.',
+      showCancelButton:true,
+      confirmButtonText:'Sí, borrar todo',
+      confirmButtonColor:'#dc2626',
+      cancelButtonText:'Cancelar'
+    });
+    if(!r2.isConfirmed) return;
+  
+    db={
+      settings:{
+        pinHash: db.settings.pinHash,
+        salt:    db.settings.salt,        // ⬅️ preservar salt
+        moraDefault: 5,
+        creditor: { nombre:'', cedula:'', ciudad:'' }
+      },
+      personas:[], prestamos:[], pagos:[]
+    };
+    saveDB();
+    render();
+    toast('Datos borrados');
+  }
    
    /* =========================================================
       FORM: PERSONA
@@ -861,10 +1100,10 @@ function devFooter(){
          <div class="row" style="justify-content:flex-start;gap:12px;margin-bottom:12px">
            ${p.foto?`<img class="avatar" src="${p.foto}">`:`<div class="avatar" style="width:52px;height:52px;font-size:20px">${esc((p.nombre||'?').charAt(0).toUpperCase())}</div>`}
            <div class="text-xs">
-             ${p.cedula?`<div>🪪 ${esc(p.cedula)}</div>`:''}
-             ${p.telefono?`<div>📞 <a href="tel:${esc(p.telefono)}" class="text-blue-600 font-medium">${esc(p.telefono)}</a> · <a href="https://wa.me/${waPhone(p.telefono)}" target="_blank" class="text-green-600 font-medium">WhatsApp</a></div>`:''}
-             ${p.email?`<div>✉️ ${esc(p.email)}</div>`:''}
-             ${p.direccion?`<div>🏠 ${esc(p.direccion)}</div>`:''}
+           ${p.cedula?`<div><i class="fa-solid fa-id-card mr-1.5 text-slate-400"></i>${esc(p.cedula)}</div>`:''}
+           ${p.telefono?`<div><i class="fa-solid fa-phone mr-1.5 text-slate-400"></i><a href="tel:${esc(p.telefono)}" class="text-blue-600 font-medium">${esc(p.telefono)}</a> · <a href="https://wa.me/${waPhone(p.telefono)}" target="_blank" class="text-green-600 font-medium"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a></div>`:''}
+           ${p.email?`<div><i class="fa-solid fa-envelope mr-1.5 text-slate-400"></i>${esc(p.email)}</div>`:''}
+           ${p.direccion?`<div><i class="fa-solid fa-house mr-1.5 text-slate-400"></i>${esc(p.direccion)}</div>`:''}
            </div>
          </div>
          ${p.referencias?`<div class="card" style="margin-bottom:10px"><b class="text-xs">Referencias</b><div class="text-xs text-slate-500">${esc(p.referencias)}</div></div>`:''}
@@ -1034,7 +1273,7 @@ function devFooter(){
        body:`
          <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px">
            <span class="tag ${r.estado}">${r.estado}</span>
-           <button class="btn sm" onclick="generarPagare('${p.id}')">📄 Pagaré</button>
+           <button class="btn sm" onclick="generarPagare('${p.id}')"><i class="fa-solid fa-file-contract mr-1"></i>Pagaré</button>
          </div>
          <div class="card">
            <div class="kv"><span>Capital</span><b>${money(r.cap)}</b></div>
@@ -1053,7 +1292,7 @@ function devFooter(){
              return `<div class="cuota">
                <span>Cuota ${c.n} · ${fmtFecha(c.fecha)}</span>
                <span class="${c.pendiente<=0.009?'text-green-600 font-bold':venc?'text-red-600 font-bold':''}">
-                 ${c.pendiente<=0.009?'✓ pagada':money(c.pendiente)}
+                 ${c.pendiente<=0.009?'<i class="fa-solid fa-check mr-1"></i>pagada':money(c.pendiente)}
                </span>
              </div>`;
            }).join('')}
@@ -1065,8 +1304,8 @@ function devFooter(){
                <span>${fmtFecha(g.fecha)}${g.nota?` · <span class="text-slate-400">${esc(g.nota)}</span>`:''}</span>
                <span style="display:flex;gap:6px;align-items:center">
                  <b>${money(g.monto)}</b>
-                 <button class="btn sm ghost" onclick="openRecibo('${g.id}')" title="Recibo">📄</button>
-                 <button class="btn sm ghost" onclick="borrarPago('${g.id}','${p.id}')" title="Eliminar">🗑</button>
+                 <button class="btn sm ghost" onclick="openRecibo('${g.id}')" title="Recibo"><i class="fa-solid fa-receipt"></i></button>
+                 <button class="btn sm ghost" onclick="borrarPago('${g.id}','${p.id}')" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
                </span>
              </div>`).join(''):'<div class="text-xs text-slate-400">Sin pagos aún</div>'}
          </div>`,
@@ -1180,47 +1419,58 @@ function devFooter(){
    }
    
    function openRecibo(pagoId,{esNuevo=false}={}){
-     const g=db.pagos.find(x=>x.id===pagoId);if(!g)return;
-     const p=db.prestamos.find(x=>x.id===g.prestamoId);if(!p)return;
-     const per=personaDe(p.personaId);
-     const r=resumenPrestamo(p);
-   
+    const g=db.pagos.find(x=>x.id===pagoId);if(!g)return;
+    const p=db.prestamos.find(x=>x.id===g.prestamoId);if(!p)return;
+    const per=personaDe(p.personaId);
+    const r=resumenPrestamo(p);
+    const cred=db.settings.creditor||{};
+    const acreedor=cred.nombre||'PrestaMe';
+
      openModal(modalShell({
-       title:esNuevo?'✅ Pago registrado':'Recibo',
+      title:esNuevo?'<i class="fa-solid fa-circle-check text-green-600 mr-1.5"></i>Pago registrado':'Recibo',
        body:`
-         <div class="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 bg-blue-50/50 dark:bg-blue-950/20 text-sm">
+         <div id="recibo-preview" class="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 bg-blue-50/50 dark:bg-blue-950/20 text-sm">
            <h4 class="text-center tracking-widest text-xs text-slate-400 mb-1 font-bold">RECIBO DE PAGO</h4>
            <div class="text-center text-3xl font-extrabold text-blue-600 dark:text-blue-400 tabular-nums my-2">${money(g.monto)}</div>
+
            <div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Cliente</span><b>${esc(per.nombre)}</b></div>
-           ${per.cedula?`<div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Cédula</span><b>${esc(per.cedula)}</b></div>`:''}
+${per.cedula?`<div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Cédula</span><b>${esc(per.cedula)}</b></div>`:''}
+<div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Acreedor</span><b>${esc(acreedor)}</b></div>
+${cred.cedula?`<div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Céd. acreedor</span><b>${esc(cred.cedula)}</b></div>`:''}
+
+
            <div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Fecha</span><b>${fmtFecha(g.fecha)}</b></div>
            ${g.nota?`<div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Nota</span><b>${esc(g.nota)}</b></div>`:''}
            <div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Capital préstamo</span><b>${money(p.capital)}</b></div>
            <div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Total a pagar</span><b>${money(r.total)}</b></div>
            <div class="flex justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800/60 text-xs"><span>Pagado acumulado</span><b>${money(r.pag)}</b></div>
            <div class="flex justify-between py-1.5 text-xs"><span>Saldo actual</span><b style="color:${r.saldo>0?'#dc2626':'#16a34a'}">${money(r.saldo)}</b></div>
-           <div class="text-center mt-3 text-[11px] text-slate-400 italic">Gracias por su pago · PrestaMe</div>
+           <div class="text-center mt-3 text-[11px] text-slate-400 italic">Gracias por su pago · ${esc(acreedor)}</div>
          </div>
          <p class="text-xs text-slate-500 text-center my-3">
            Comparte el recibo con tu cliente por WhatsApp.
          </p>`,
-       foot:`
-         <button class="btn ghost" onclick="copiarRecibo('${g.id}')" title="Copiar texto">📋</button>
-         <button class="btn ok" onclick="enviarPorWhatsApp('${g.id}')">💬 WhatsApp</button>
-         <button class="btn primary" onclick="compartirRecibo('${g.id}')">Compartir</button>`
+         foot:`
+  <button class="btn ghost" onclick="copiarRecibo('${g.id}')" title="Copiar texto"><i class="fa-solid fa-copy"></i></button>
+  <button class="btn ok" onclick="enviarPorWhatsApp('${g.id}')"><i class="fa-brands fa-whatsapp mr-1.5"></i>WhatsApp</button>
+  <button class="btn danger" onclick="compartirReciboPDF('${g.id}')"><i class="fa-solid fa-file-pdf mr-1.5"></i>PDF</button>`
      }));
    }
    
    function textoRecibo(pagoId){
-     const g=db.pagos.find(x=>x.id===pagoId);if(!g)return'';
-     const p=db.prestamos.find(x=>x.id===g.prestamoId);if(!p)return'';
-     const per=personaDe(p.personaId);
-     const r=resumenPrestamo(p);
+    const g=db.pagos.find(x=>x.id===pagoId);if(!g)return'';
+    const p=db.prestamos.find(x=>x.id===g.prestamoId);if(!p)return'';
+    const per=personaDe(p.personaId);
+    const r=resumenPrestamo(p);
+    const cred=db.settings.creditor||{};
+    const acreedor=cred.nombre||'PrestaMe';
+
      const line='━━━━━━━━━━━━━━━';
      return `✅ *RECIBO DE PAGO*
-   ${line}
-   👤 *${per.nombre}*${per.cedula?`\n🪪 Cédula: ${per.cedula}`:''}
-   📅 Fecha: ${fmtFecha(g.fecha)}
+${line}
+🏦 *Acreedor:* ${acreedor}${cred.cedula?`\n🪪 Céd. acreedor: ${cred.cedula}`:''}
+👤 *Cliente:* ${per.nombre}${per.cedula?`\n🪪 Cédula: ${per.cedula}`:''}
+📅 Fecha: ${fmtFecha(g.fecha)}
    
    💵 *Monto recibido:* ${money(g.monto)}${g.nota?`\n📝 Nota: ${g.nota}`:''}
    
@@ -1231,8 +1481,8 @@ function devFooter(){
    • *Saldo actual:* ${money(r.saldo)}
    ${r.mora>0?`• Mora acum.: ${money(r.mora)}\n`:''}
    ${line}
-   Gracias por su pago 🙏
-   _PrestaMe_`;
+Gracias por su pago 🙏
+_${acreedor}_`;
    }
    
    async function compartirRecibo(pagoId){
@@ -1420,13 +1670,13 @@ function devFooter(){
      }
      const preview = `<div style="background:#fff;color:#111;padding:22px;border-radius:10px;font-family:Georgia,'Times New Roman',serif;font-size:11.5px;line-height:1.55;max-height:58vh;overflow-y:auto">${pagareContent(p, per, cred)}</div>`;
      openModal(modalShell({
-       title:'Pagaré',
+      title:'<i class="fa-solid fa-file-contract mr-1.5 text-slate-500"></i>Pagaré',
        body: preview,
        foot: `
-         <button class="btn ghost" onclick="closeModal()" title="Cerrar">✕</button>
-         <button class="btn" onclick="copiarPagareTexto('${prestamoId}')" title="Copiar texto">📋</button>
-         <button class="btn ok" onclick="compartirPagareTexto('${prestamoId}')">💬 Enviar</button>
-         <button class="btn primary" onclick="imprimirPagare('${prestamoId}')">🖨 PDF</button>`
+  <button class="btn ghost" onclick="closeModal()" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+  <button class="btn" onclick="copiarPagareTexto('${prestamoId}')" title="Copiar texto"><i class="fa-solid fa-copy"></i></button>
+  <button class="btn ok" onclick="compartirPagareTexto('${prestamoId}')"><i class="fa-brands fa-whatsapp mr-1.5"></i>Enviar</button>
+  <button class="btn primary" onclick="imprimirPagare('${prestamoId}')"><i class="fa-solid fa-print mr-1.5"></i>PDF</button>`
      }));
    }
    
@@ -1525,12 +1775,21 @@ function devFooter(){
      }));
    }
    async function cambiarPin(){
-     const oldp=$('#cp_old').value.trim(),n1=$('#cp_new').value.trim(),n2=$('#cp_new2').value.trim();
-     if((await hashPin(oldp))!==db.settings.pinHash)return toast('PIN actual incorrecto');
-     if(n1.length<4)return toast('Mínimo 4 dígitos');
-     if(n1!==n2)return toast('No coinciden');
-     db.settings.pinHash=await hashPin(n1);saveDB();buzz();closeModal();toast('PIN actualizado');
-   }
+    const oldp = $('#cp_old').value.trim();
+    const n1   = $('#cp_new').value.trim();
+    const n2   = $('#cp_new2').value.trim();
+  
+    if(!(await verificarPin(oldp, db.settings.pinHash)))
+      return toast('PIN actual incorrecto');
+    if(n1.length < 4) return toast('Mínimo 4 dígitos');
+    if(n1 !== n2)     return toast('No coinciden');
+  
+    db.settings.pinHash = await hashPin(n1);
+    saveDB();
+    buzz();
+    closeModal();
+    toast('PIN actualizado');
+  }
    
    /* =========================================================
       EXPORTAR / IMPORTAR
@@ -1586,7 +1845,12 @@ function devFooter(){
          if(!r.isConfirmed) return;
    
          db={
-           settings:Object.assign({pinHash:db.settings.pinHash,moraDefault:5,creditor:{nombre:'',cedula:'',ciudad:''}},d.settings||{}),
+          settings:Object.assign({
+            pinHash: db.settings.pinHash,
+            salt:    db.settings.salt,
+            moraDefault: 5,
+            creditor: { nombre:'',cedula:'',ciudad:'' }
+          }, d.settings || {}),
            personas:d.personas, prestamos:d.prestamos, pagos:d.pagos||[]
          };
          saveDB();render();buzz();toast('Respaldo restaurado');

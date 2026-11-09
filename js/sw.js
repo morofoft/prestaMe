@@ -1,4 +1,5 @@
-const CACHE_NAME = 'PrestaMe-v3';   // ⬅️ bump para invalidar viejo
+const CACHE_NAME = 'PrestaMe-v5';   
+
 const ASSETS = [
   './',
   './index.html',
@@ -7,6 +8,13 @@ const ASSETS = [
   './js/main.js',
   'https://cdn.tailwindcss.com',
   'https://cdn.jsdelivr.net/npm/sweetalert2@11',
+  'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css',
+  'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/webfonts/fa-solid-900.woff2',
+  'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/webfonts/fa-brands-400.woff2',
+  // ⬇️ nuevas
+  'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+  'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js',
+  // ⬇️ existentes
   'https://cdn-icons-png.flaticon.com/192/2489/2489756.png',
   'https://cdn-icons-png.flaticon.com/512/2489/2489756.png'
 ];
