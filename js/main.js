@@ -16,7 +16,15 @@
    const parseISO=s=>{const[y,m,d]=String(s||'').split('-').map(Number);return new Date(y||1970,(m||1)-1,d||1);};
    const fmtFecha=s=>{if(!s)return'—';const p=String(s).split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:s;};
    const addDias=(s,n)=>{const d=parseISO(s);d.setDate(d.getDate()+Number(n));return isoOf(d);};
-   const addMeses=(s,n)=>{const d=parseISO(s);d.setMonth(d.getMonth()+Number(n));return isoOf(d);};
+   const addMeses=(s,n)=>{
+    const d = parseISO(s);
+    const day = d.getDate();
+    d.setDate(1);                              // evita el desborde
+    d.setMonth(d.getMonth() + Number(n));
+    const lastDay = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+    d.setDate(Math.min(day, lastDay));          // clamp al último día del mes
+    return isoOf(d);
+  };
    const diasEntre=(a,b)=>Math.round((parseISO(b)-parseISO(a))/86400000);
    const money=n=>new Intl.NumberFormat('es-DO',{style:'currency',currency:'DOP',minimumFractionDigits:2,maximumFractionDigits:2}).format(isFinite(n)?n:0);
    const numF=n=>new Intl.NumberFormat('es-DO',{maximumFractionDigits:2}).format(isFinite(n)?n:0);
@@ -976,9 +984,40 @@ ${activo?`<button class="pay" data-action="pay"><i class="fa-solid fa-hand-holdi
        <div class="kv"><span>Almacenamiento</span><b>${(JSON.stringify(db).length/1024).toFixed(1)} KB</b></div>
        <div style="margin-top:12px"><button class="btn danger" onclick="borrarTodo()">Borrar todos los datos</button></div>
      </div>
+
+     <div class="card">
+  <h3 class="font-bold">Versión</h3>
+  <p class="text-xs text-slate-500 my-1">Si no ves los últimos cambios, toca aquí.</p>
+  <button class="btn primary w-full mt-2" onclick="buscarActualizaciones()">
+    <i class="fa-solid fa-rotate mr-1.5"></i>Buscar actualización
+  </button>
+</div>
    
-     <p class="text-[11px] text-slate-400 text-center mt-4">PrestaMe · DOP · v3.0</p>`;
+     <p class="text-[11px] text-slate-400 text-center mt-4">PrestaMe · DOP · v6</p>`;
+
+
    }
+
+   async function buscarActualizaciones(){
+    if(!('serviceWorker' in navigator)) return toast('No soportado en este navegador');
+    try{
+      toast('Buscando…');
+      const reg = await navigator.serviceWorker.getRegistration();
+      if(!reg) return toast('No hay Service Worker');
+      await reg.update();
+      setTimeout(() => {
+        if (reg.waiting){
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          toast('Actualizando…');
+        } else if (reg.installing || reg.active){
+          toast('Ya tienes la última versión');
+        }
+      }, 1500);
+    }catch(e){
+      toast('Error al verificar');
+    }
+  }
+
    
    function setTema(t){localStorage.setItem('pc_theme',t);aplicarTema();render();buzz();}
    function guardarMoraDefault(){
@@ -1859,29 +1898,69 @@ _${acreedor}_`;
      reader.readAsText(f);
    }
    
-   /* =========================================================
-      PWA
-      ========================================================= */
+/* =========================================================
+   PWA
+   ========================================================= */
    (function initPWA(){
-     const icon='data:image/svg+xml;utf8,'+encodeURIComponent(
-       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#2563eb"/><text x="256" y="330" font-size="240" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold">RD$</text></svg>');
-     const manifest={
-       name:'PrestaMe',short_name:'Presta',start_url:'.',scope:'.',
-       display:'standalone',background_color:'#0b1220',theme_color:'#0b1220',
-       lang:'es',orientation:'portrait',
-       icons:[{src:icon,sizes:'512x512',type:'image/svg+xml',purpose:'any'}]
-     };
-     let link=document.querySelector('link[rel="manifest"]');
-     if(!link){
-       link=document.createElement('link');
-       link.rel='manifest';
-       document.head.appendChild(link);
-     }
-     try{link.href='data:application/manifest+json;charset=utf-8,'+encodeURIComponent(JSON.stringify(manifest));}catch(e){}
-     if('serviceWorker' in navigator&&location.protocol.startsWith('http')){
-       navigator.serviceWorker.register('./sw.js').catch(()=>{});
-     }
-   })();
+    const icon='data:image/svg+xml;utf8,'+encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#2563eb"/><text x="256" y="330" font-size="240" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold">RD$</text></svg>');
+    const manifest={
+      name:'PrestaMe',short_name:'Presta',start_url:'.',scope:'.',
+      display:'standalone',background_color:'#0b1220',theme_color:'#0b1220',
+      lang:'es',orientation:'portrait',
+      icons:[{src:icon,sizes:'512x512',type:'image/svg+xml',purpose:'any'}]
+    };
+    let link=document.querySelector('link[rel="manifest"]');
+    if(!link){
+      link=document.createElement('link');
+      link.rel='manifest';
+      document.head.appendChild(link);
+    }
+    try{link.href='data:application/manifest+json;charset=utf-8,'+encodeURIComponent(JSON.stringify(manifest));}catch(e){}
+  
+    if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+        .then(reg => {
+          // Chequeo periódico de actualizaciones (cada 60 min)
+          setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+  
+          // Si hay un SW esperando, activarlo
+          const activarSiEspera = () => {
+            if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          };
+          activarSiEspera();
+  
+          // Detectar cuando aparece una nueva versión
+          reg.addEventListener('updatefound', () => {
+            const nuevo = reg.installing;
+            if (!nuevo) return;
+            nuevo.addEventListener('statechange', () => {
+              if (nuevo.state === 'installed' && navigator.serviceWorker.controller) {
+                // Hay nueva versión lista → activar
+                nuevo.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          });
+        })
+        .catch(() => {});
+  
+      // Mensaje del SW → recargar
+      navigator.serviceWorker.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'SW_ACTIVATED') {
+          toast('App actualizada');
+          setTimeout(() => window.location.reload(), 800);
+        }
+      });
+  
+      // Cuando el SW toma control (primera vez o tras update) → recargar
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      });
+    }
+  })();
    
    /* =========================================================
       ARRANQUE
