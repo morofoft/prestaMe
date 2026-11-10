@@ -687,8 +687,64 @@ function viewPanel() {
       b: r2(sum(db.pagos.filter(g => (g.fecha || '').slice(0, 7) === key), g => g.monto))
     });
   }
+  const cuotasHoy = [];
+const cuotasVencidas = [];
+const promesasHoy = [];
+activos.forEach(p => {
+  if (p.promesaFecha && p.promesaFecha <= hoy) promesasHoy.push(p);
+  cuotasConEstado(p).forEach(c => {
+    if (c.pendiente > 0.009){
+      if (c.fecha === hoy) cuotasHoy.push({ p, c });
+      else if (c.fecha < hoy) cuotasVencidas.push({ p, c });
+    }
+  });
+});
+const totalHoy = r2(sum(cuotasHoy, x => x.c.pendiente));
+const totalVencido = r2(sum(cuotasVencidas, x => x.c.pendiente));
+const totalEsperado = r2(totalHoy + totalVencido);
 
   return `
+  <div class="card" style="background:linear-gradient(135deg,#2563eb,#1e40af);color:white;border:none">
+  <div class="row" style="margin-bottom:10px">
+    <h3 class="font-bold"><i class="fa-solid fa-bullseye mr-1.5"></i>HOY · ${fmtFecha(hoy)}</h3>
+  </div>
+  <div class="gridk" style="margin-bottom:10px">
+    <div>
+      <div style="font-size:11px;opacity:.85;font-weight:700;text-transform:uppercase">Vencen hoy</div>
+      <div style="font-size:24px;font-weight:800;line-height:1.1">${cuotasHoy.length}</div>
+      <div style="font-size:12px;opacity:.9">${money(totalHoy)}</div>
+    </div>
+    <div>
+      <div style="font-size:11px;opacity:.85;font-weight:700;text-transform:uppercase">Vencidas</div>
+      <div style="font-size:24px;font-weight:800;line-height:1.1">${cuotasVencidas.length}</div>
+      <div style="font-size:12px;opacity:.9">${money(totalVencido)}</div>
+    </div>
+  </div>
+  <div style="font-size:13px;border-top:1px solid rgba(255,255,255,.25);padding-top:8px;display:flex;justify-content:space-between;align-items:center">
+    <span style="opacity:.9">Esperado</span><b style="font-size:16px">${money(totalEsperado)}</b>
+  </div>
+  ${(cuotasHoy.length + cuotasVencidas.length) > 0 ? `
+  <button class="btn w-full mt-2" style="background:white;color:#1e40af;border:none;font-weight:800" onclick="verCuotasHoy()">
+    <i class="fa-solid fa-list-check mr-1.5"></i>Ver cuotas por cobrar (${cuotasHoy.length + cuotasVencidas.length})
+  </button>` : `<div style="text-align:center;font-size:12px;opacity:.9;padding-top:6px">Sin cuotas pendientes hoy 🎉</div>`}
+</div>
+
+${promesasHoy.length > 0 ? `
+<div class="card" style="background:#fef3c7;border-color:#f59e0b">
+  <h3 class="font-bold mb-2" style="color:#92400e"><i class="fa-solid fa-handshake mr-1.5"></i>Prometieron pagar hoy</h3>
+  ${promesasHoy.map(p => {
+    const per = personaDe(p.personaId);
+    const r = resumenPrestamo(p);
+    return `<div class="remind-item" style="border-color:#fde68a">
+      <div class="info" onclick="openPrestamoDetalle('${p.id}')" style="cursor:pointer">
+        <b style="color:#78350f">${esc(per.nombre)}</b>
+        <div class="text-xs" style="color:#92400e">${p.promesaNota ? esc(p.promesaNota) : 'Prometió pagar'}</div>
+      </div>
+      <b style="color:#78350f">${money(r.saldo)}</b>
+    </div>`;
+  }).join('')}
+</div>` : ''}
+  
      <div class="gridk">
        <div class="kpi pri"><div class="lbl">Capital en la calle</div><div class="val">${money(capCalle)}</div></div>
        <div class="kpi"><div class="lbl">Por cobrar</div><div class="val">${money(porCobrar)}</div></div>
@@ -772,6 +828,91 @@ function svgChart(serie) {
   out += `<line x1="${padL}" y1="${padT + h}" x2="${W - padL}" y2="${padT + h}" stroke="#e2e8f0" stroke-width="1"/>`;
   return `<svg viewBox="0 0 ${W} ${H}" class="chart" preserveAspectRatio="xMidYMid meet">${out}</svg>`;
 }
+/* =========================================================
+   HOY — cuotas y promesas del día
+   ========================================================= */
+   function verCuotasHoy(){
+    const hoy = hoyISO();
+    const items = [];
+    db.prestamos.filter(p => estadoPrestamo(p) !== 'pagado').forEach(p => {
+      cuotasConEstado(p).forEach(c => {
+        if (c.pendiente > 0.009 && c.fecha <= hoy) items.push({ p, c });
+      });
+    });
+    items.sort((a, b) => a.c.fecha.localeCompare(b.c.fecha));
+  
+    if (!items.length) return toast('Sin cuotas pendientes para hoy');
+  
+    const total = r2(sum(items, x => x.c.pendiente));
+  
+    openModal(modalShell({
+      title: `<i class="fa-solid fa-list-check mr-1.5 text-blue-600"></i>Cuotas por cobrar (${items.length})`,
+      body: `
+        <div class="preview" style="text-align:center;font-weight:800;font-size:15px">
+          Total a cobrar: ${money(total)}
+        </div>
+        ${items.map(({ p, c }) => {
+          const per = personaDe(p.personaId);
+          const tel = waPhone(per.telefono);
+          const msg = msgRecordatorio(per, c, p);
+          const waUrl = tel ? `https://wa.me/${tel}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+          const vencida = c.fecha < hoy;
+          return `
+            <div class="remind-item" style="${vencida ? 'background:#fef2f2' : ''}">
+              <div class="info" onclick="closeModalForNew();setTimeout(()=>openPrestamoDetalle('${p.id}'),50)" style="cursor:pointer">
+                <b>${esc(per.nombre)}</b>
+                <div class="text-xs">
+                  ${vencida ? `<span class="text-red-600 font-semibold">Venció ${fmtFecha(c.fecha)}</span>` : `<span class="text-amber-600 font-semibold">Vence hoy</span>`}
+                  · cuota ${c.n}
+                </div>
+              </div>
+              <div class="actions">
+                <span class="text-sm font-extrabold tabular-nums">${money(c.pendiente)}</span>
+                <a class="iconAction wa" href="${waUrl}" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="fa-brands fa-whatsapp"></i></a>
+                <button class="iconAction" onclick="closeModalForNew();setTimeout(()=>openPagoForm('${p.id}'),50)" aria-label="Pagar" title="Registrar pago"><i class="fa-solid fa-hand-holding-dollar"></i></button>
+              </div>
+            </div>`;
+        }).join('')}`
+    }));
+  }
+  
+  function openPromesaForm(prestamoId){
+    const p = db.prestamos.find(x => x.id === prestamoId);
+    if (!p) return;
+    openModal(modalShell({
+      title: '<i class="fa-solid fa-handshake mr-1.5 text-amber-500"></i>Promesa de pago',
+      body: `
+        <div class="form">
+          <label>Fecha prometida<input id="pm_fecha" type="date" value="${p.promesaFecha || addDias(hoyISO(), 3)}"></label>
+          <label>Nota (opcional)<input id="pm_nota" value="${esc(p.promesaNota || '')}" placeholder="Ej. cobra el viernes"></label>
+        </div>
+        ${p.promesaFecha ? `<p class="text-xs text-slate-500 mt-2">Promesa actual: <b>${fmtFecha(p.promesaFecha)}</b>${p.promesaNota ? ` · ${esc(p.promesaNota)}` : ''}</p>` : ''}`,
+      foot: `
+        ${p.promesaFecha ? `<button class="btn ghost" onclick="borrarPromesa('${p.id}')"><i class="fa-solid fa-xmark mr-1"></i>Quitar</button>` : ''}
+        <button class="btn ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn primary" onclick="savePromesa('${p.id}')">Guardar</button>`
+    }));
+  }
+  
+  function savePromesa(prestamoId){
+    const fecha = $('#pm_fecha').value;
+    if (!fecha) return toast('Selecciona una fecha');
+    const p = db.prestamos.find(x => x.id === prestamoId);
+    if (!p) return;
+    p.promesaFecha = fecha;
+    p.promesaNota = $('#pm_nota').value.trim();
+    saveDB(); buzz(); closeModal(); render();
+    toast('Promesa guardada');
+  }
+  
+  function borrarPromesa(prestamoId){
+    const p = db.prestamos.find(x => x.id === prestamoId);
+    if (!p) return;
+    delete p.promesaFecha;
+    delete p.promesaNota;
+    saveDB(); closeModal(); render();
+    toast('Promesa eliminada');
+  }
 
 /* =========================================================
    PRÉSTAMOS
@@ -842,6 +983,7 @@ ${activo ? `<button class="pay" data-action="pay"><i class="fa-solid fa-hand-hol
                </div>
              </div>
              ${r.mora > 0 ? `<div class="text-[11px] text-red-600 font-medium mt-1.5">Mora: ${money(r.mora)}</div>` : ''}
+             ${p.promesaFecha && p.promesaFecha <= hoyISO() && activo ? `<div class="text-[11px] text-amber-600 font-medium mt-1.5"><i class="fa-solid fa-handshake mr-1"></i>Prometió pagar ${fmtFecha(p.promesaFecha)}</div>` : ''}
            </div>
          </div>`;
   }).join('')}`;
@@ -914,7 +1056,103 @@ function initSwipes() {
     }, true);
   });
 }
-
+/* =========================================================
+   INDEXEDDB (fotos de personas)
+   ========================================================= */
+   const IDB_NAME = 'PrestaMeFiles';
+   const IDB_STORE = 'fotos';
+   const _fotoCache = new Map();
+   
+   let _idbPromise = null;
+   function idbOpen(){
+     if (_idbPromise) return _idbPromise;
+     _idbPromise = new Promise((resolve, reject) => {
+       const req = indexedDB.open(IDB_NAME, 1);
+       req.onupgradeneeded = () => {
+         const idb = req.result;
+         if (!idb.objectStoreNames.contains(IDB_STORE)) idb.createObjectStore(IDB_STORE);
+       };
+       req.onsuccess = () => resolve(req.result);
+       req.onerror = () => reject(req.error);
+     });
+     return _idbPromise;
+   }
+   async function idbPut(key, value){
+     const idb = await idbOpen();
+     return new Promise((resolve, reject) => {
+       const tx = idb.transaction(IDB_STORE, 'readwrite');
+       tx.objectStore(IDB_STORE).put(value, key);
+       tx.oncomplete = () => resolve();
+       tx.onerror = () => reject(tx.error);
+     });
+   }
+   async function idbGet(key){
+     const idb = await idbOpen();
+     return new Promise((resolve, reject) => {
+       const tx = idb.transaction(IDB_STORE, 'readonly');
+       const req = tx.objectStore(IDB_STORE).get(key);
+       req.onsuccess = () => resolve(req.result);
+       req.onerror = () => reject(req.error);
+     });
+   }
+   async function idbDelete(key){
+     const idb = await idbOpen();
+     return new Promise((resolve, reject) => {
+       const tx = idb.transaction(IDB_STORE, 'readwrite');
+       tx.objectStore(IDB_STORE).delete(key);
+       tx.oncomplete = () => resolve();
+       tx.onerror = () => reject(tx.error);
+     });
+   }
+   
+   /* Cache en memoria (síncrono para la UI) */
+   function getFotoSync(personaId){ return _fotoCache.get(personaId) || null; }
+   
+   async function getFoto(personaId){
+     if (_fotoCache.has(personaId)) return _fotoCache.get(personaId);
+     try {
+       const data = await idbGet('foto_' + personaId);
+       if (data) _fotoCache.set(personaId, data);
+       return data || null;
+     } catch (e) { console.warn('Error leyendo foto', e); return null; }
+   }
+   
+   async function setFoto(personaId, dataUrl){
+     try {
+       if (dataUrl){
+         await idbPut('foto_' + personaId, dataUrl);
+         _fotoCache.set(personaId, dataUrl);
+       } else {
+         await idbDelete('foto_' + personaId);
+         _fotoCache.delete(personaId);
+       }
+     } catch (e) { console.warn('Error guardando foto', e); }
+   }
+   
+   async function migrarFotosLegacy(){
+     const conFoto = db.personas.filter(p => p.foto && p.foto.startsWith('data:'));
+     if (!conFoto.length) return;
+     console.log(`Migrando ${conFoto.length} foto(s) a IndexedDB…`);
+     for (const p of conFoto){
+       try {
+         await setFoto(p.id, p.foto);
+         delete p.foto;
+       } catch (e) { console.warn('No se pudo migrar foto', p.id, e); }
+     }
+     saveDB();
+     console.log('Migración de fotos completa');
+   }
+   
+   async function precargarFotos(){
+     for (const p of db.personas){
+       if (p.foto && p.foto.startsWith('data:')){
+         _fotoCache.set(p.id, p.foto);
+       } else {
+         const f = await idbGet('foto_' + p.id).catch(() => null);
+         if (f) _fotoCache.set(p.id, f);
+       }
+     }
+   }
 /* =========================================================
    PERSONAS
    ========================================================= */
@@ -933,7 +1171,7 @@ function viewPersonas() {
        <div class="card cursor-pointer" onclick="openPersonaDetalle('${p.id}')">
          <div class="row">
            <div class="row" style="justify-content:flex-start;gap:11px;min-width:0">
-             ${p.foto ? `<img class="avatar" src="${p.foto}" alt="">` : `<div class="avatar">${esc((p.nombre || '?').trim().charAt(0).toUpperCase())}</div>`}
+             ${getFotoSync(p.id) ? `<img class="avatar" src="${getFotoSync(p.id)}" alt="">` : `<div class="avatar">${esc((p.nombre || '?').trim().charAt(0).toUpperCase())}</div>`}
              <div style="min-width:0">
                <div class="font-bold truncate">${esc(p.nombre)}</div>
                <div class="text-xs text-slate-500">${esc(p.telefono || p.cedula || '—')}</div>
@@ -1030,7 +1268,7 @@ function viewAjustes() {
   </button>
 </div>
    
-     <p class="text-[11px] text-slate-400 text-center mt-4">PrestaMe · DOP · v6</p>`;
+     <p class="text-[11px] text-slate-400 text-center mt-4">PrestaMe · DOP · v10</p>`;
 
 
 }
@@ -1104,31 +1342,36 @@ async function borrarTodo() {
    FORM: PERSONA
    ========================================================= */
 let tmpFoto = '';
-function openPersonaForm(id) {
+
+async function openPersonaForm(id){
   const p = id ? db.personas.find(x => x.id === id) : null;
-  const d = p || { nombre: '', cedula: '', telefono: '', email: '', direccion: '', referencias: '', notas: '', foto: '' };
-  tmpFoto = d.foto || '';
+  const d = p || { nombre: '', cedula: '', telefono: '', email: '', direccion: '', referencias: '', notas: '' };
+  tmpFoto = p ? (await getFoto(p.id)) || '' : '';
+
   openModal(modalShell({
     title: p ? 'Editar persona' : 'Nueva persona',
     body: `
-         <div class="form">
-           <label>Nombre completo *<input id="pe_nombre" value="${esc(d.nombre)}" autocomplete="off"></label>
-           <div class="gridk">
-             <label style="margin-bottom:0">Cédula<input id="pe_cedula" value="${esc(d.cedula)}" inputmode="numeric"></label>
-             <label style="margin-bottom:0">Teléfono<input id="pe_telefono" value="${esc(d.telefono)}" inputmode="tel"></label>
-           </div>
-           <div style="height:12px"></div>
-           <label>Email<input id="pe_email" type="email" value="${esc(d.email)}" inputmode="email"></label>
-           <label>Dirección<input id="pe_direccion" value="${esc(d.direccion)}"></label>
-           <label>Referencias<textarea id="pe_ref" rows="2">${esc(d.referencias)}</textarea></label>
-           <label>Notas<textarea id="pe_notas" rows="2">${esc(d.notas)}</textarea></label>
-           <label>Foto (opcional)<input type="file" accept="image/*" id="pe_foto"></label>
-           <div id="pe_fotoPrev">${tmpFoto ? `<img src="${tmpFoto}" class="w-16 h-16 rounded-xl object-cover mt-2">` : ''}</div>
-         </div>`,
+      <div class="form">
+        <label>Nombre completo *<input id="pe_nombre" value="${esc(d.nombre)}" autocomplete="off"></label>
+        <div class="gridk">
+          <label style="margin-bottom:0">Cédula<input id="pe_cedula" value="${esc(d.cedula)}" inputmode="numeric"></label>
+          <label style="margin-bottom:0">Teléfono<input id="pe_telefono" value="${esc(d.telefono)}" inputmode="tel"></label>
+        </div>
+        <div style="height:12px"></div>
+        <label>Email<input id="pe_email" type="email" value="${esc(d.email)}" inputmode="email"></label>
+        <label>Dirección<input id="pe_direccion" value="${esc(d.direccion)}"></label>
+        <label>Referencias<textarea id="pe_ref" rows="2">${esc(d.referencias)}</textarea></label>
+        <label>Notas<textarea id="pe_notas" rows="2">${esc(d.notas)}</textarea></label>
+        <label>Foto (opcional)<input type="file" accept="image/*" id="pe_foto"></label>
+        <div id="pe_fotoPrev" style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          ${tmpFoto ? `<img src="${tmpFoto}" class="w-16 h-16 rounded-xl object-cover"><button type="button" class="btn sm ghost" onclick="quitarFoto()"><i class="fa-solid fa-xmark mr-1"></i>Quitar</button>` : ''}
+        </div>
+      </div>`,
     foot: `
-         <button class="btn ghost" onclick="closeModal()">Cancelar</button>
-         <button class="btn primary" onclick="savePersona('${p ? p.id : ''}')">Guardar</button>`
+      <button class="btn ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="savePersona('${p ? p.id : ''}')">Guardar</button>`
   }));
+
   $('#pe_foto').addEventListener('change', e => {
     const f = e.target.files[0]; if (!f) return;
     const img = new Image();
@@ -1138,15 +1381,22 @@ function openPersonaForm(id) {
       c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       tmpFoto = c.toDataURL('image/jpeg', 0.72);
-      $('#pe_fotoPrev').innerHTML = `<img src="${tmpFoto}" class="w-16 h-16 rounded-xl object-cover mt-2">`;
+      $('#pe_fotoPrev').innerHTML = `<img src="${tmpFoto}" class="w-16 h-16 rounded-xl object-cover"><button type="button" class="btn sm ghost" onclick="quitarFoto()"><i class="fa-solid fa-xmark mr-1"></i>Quitar</button>`;
       URL.revokeObjectURL(img.src);
     };
     img.src = URL.createObjectURL(f);
   });
 }
-function savePersona(id) {
+
+function quitarFoto(){
+  tmpFoto = '';
+  $('#pe_fotoPrev').innerHTML = '';
+}
+
+async function savePersona(id){
   const nombre = $('#pe_nombre').value.trim();
   if (!nombre) return toast('El nombre es obligatorio');
+
   const data = {
     nombre,
     cedula: $('#pe_cedula').value.trim(),
@@ -1154,11 +1404,27 @@ function savePersona(id) {
     email: $('#pe_email').value.trim(),
     direccion: $('#pe_direccion').value.trim(),
     referencias: $('#pe_ref').value.trim(),
-    notas: $('#pe_notas').value.trim(),
-    foto: tmpFoto || ''
+    notas: $('#pe_notas').value.trim()
   };
-  if (id) { Object.assign(db.personas.find(x => x.id === id), data); }
-  else { db.personas.push(Object.assign({ id: uid(), creado: hoyISO() }, data)); }
+
+  let personaId = id;
+  if (id){
+    Object.assign(db.personas.find(x => x.id === id), data);
+  } else {
+    personaId = uid();
+    db.personas.push(Object.assign({ id: personaId, creado: hoyISO() }, data));
+  }
+
+  // Foto: solo escribir en IDB si cambió
+  const fotoActual = await getFoto(personaId);
+  if (tmpFoto !== (fotoActual || '')){
+    await setFoto(personaId, tmpFoto || null);
+  }
+
+  // Quitar cualquier foto residual en localStorage
+  const per = db.personas.find(x => x.id === personaId);
+  if (per && per.foto) delete per.foto;
+
   saveDB(); buzz(); closeModal(); render(); toast('Persona guardada');
 }
 
@@ -1176,7 +1442,7 @@ function openPersonaDetalle(id) {
     title: p.nombre,
     body:`
   <div class="row" style="justify-content:flex-start;gap:12px;margin-bottom:12px">
-    ${p.foto?`<img class="avatar" src="${p.foto}">`:`<div class="avatar" style="width:52px;height:52px;font-size:20px">${esc((p.nombre||'?').charAt(0).toUpperCase())}</div>`}
+  ${getFotoSync(p.id) ? `<img class="avatar" src="${getFotoSync(p.id)}">` : `<div class="avatar" style="width:52px;height:52px;font-size:20px">${esc((p.nombre || '?').charAt(0).toUpperCase())}</div>`}
     <div class="text-xs" style="flex:1;min-width:0">
       ${p.cedula?`<div><i class="fa-solid fa-id-card mr-1.5 text-slate-400"></i>${esc(p.cedula)}</div>`:''}
       ${p.telefono?`<div><i class="fa-solid fa-phone mr-1.5 text-slate-400"></i><a href="tel:${esc(p.telefono)}" class="text-blue-600 font-medium">${esc(p.telefono)}</a> · <a href="https://wa.me/${waPhone(p.telefono)}" target="_blank" class="text-green-600 font-medium"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a></div>`:''}
@@ -1256,6 +1522,8 @@ async function borrarPersona(id){
   db.personas  = db.personas.filter(x => x.id !== id);
   db.prestamos = db.prestamos.filter(x => x.personaId !== id);
   db.pagos     = db.pagos.filter(g => !prestamoIds.includes(g.prestamoId));
+
+  await setFoto(id, null);
 
   saveDB();
   closeModal();
@@ -1388,13 +1656,18 @@ function openPrestamoDetalle(id) {
     body: `
   <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px">
     <span class="tag ${r.estado}">${r.estado}</span>
+
     <div style="display:flex;gap:6px">
-      <button class="btn sm" onclick="generarPagare('${p.id}')"><i class="fa-solid fa-file-contract mr-1"></i>Pagaré</button>
-      <button class="btn sm danger" onclick="borrarPrestamo('${p.id}')" title="Eliminar préstamo">
-        <i class="fa-solid fa-trash"></i>
-      </button>
-    </div>
-  </div>
+  <button class="btn sm" onclick="generarPagare('${p.id}')"><i class="fa-solid fa-file-contract mr-1"></i>Pagaré</button>
+  <button class="btn sm" onclick="openPromesaForm('${p.id}')" title="Promesa de pago"
+    style="${p.promesaFecha ? 'background:#fef3c7;border-color:#f59e0b;color:#92400e' : ''}">
+    <i class="fa-solid fa-handshake"></i>
+  </button>
+  <button class="btn sm danger" onclick="borrarPrestamo('${p.id}')" title="Eliminar préstamo">
+    <i class="fa-solid fa-trash"></i>
+  </button>
+</div>
+
 
          <div class="card">
            <div class="kv"><span>Capital</span><b>${money(r.cap)}</b></div>
@@ -1405,6 +1678,18 @@ function openPrestamoDetalle(id) {
            ${r.mora > 0 ? `<div class="kv bad"><span>Mora</span><b>${money(r.mora)}</b></div>` : ''}
            <div class="kv"><span>Vence</span><b>${fmtFecha(p.primerVencimiento)}</b></div>
          </div>
+         ${p.promesaFecha ? `
+          <div class="card" style="background:#fef3c7;border-color:#f59e0b">
+            <div style="display:flex;align-items:center;gap:10px">
+              <i class="fa-solid fa-handshake" style="color:#d97706;font-size:22px"></i>
+              <div style="flex:1;min-width:0">
+                <b style="color:#92400e;font-size:13px">Promesa de pago: ${fmtFecha(p.promesaFecha)}</b>
+                ${p.promesaNota ? `<div style="font-size:11px;color:#78350f">${esc(p.promesaNota)}</div>` : ''}
+              </div>
+            </div>
+          </div>` : ''}
+
+         
          ${p.notas ? `<div class="card"><b class="text-xs">Notas</b><div class="text-xs text-slate-500">${esc(p.notas)}</div></div>` : ''}
          <h3 class="font-bold my-2">Plan de pagos</h3>
          <div class="card">
@@ -1735,7 +2020,7 @@ function pagareContent(p, per, cred) {
   const letras = numeroALetras(total);
   const montoCuota = p.modalidad === 'cuotas' ? r2(total / p.numCuotas) : total;
   const freq = (FREQ[p.frecuencia]?.l || 'mensual').toLowerCase();
-  const [y, m, d] = hoyISO().split('-');
+  const [y, m, d] = (p.fechaInicio || hoyISO()).split('-');
   const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   const ciudad = cred.ciudad || '___________________';
   const fechaTexto = `${parseInt(d)} días del mes de ${meses[parseInt(m) - 1]} del año ${y}`;
@@ -1826,7 +2111,7 @@ function pagareTexto(prestamoId) {
   const letras = numeroALetras(total);
   const cuota = p.modalidad === 'cuotas' ? r2(total / p.numCuotas) : total;
   const freq = (FREQ[p.frecuencia]?.l || 'mensual').toLowerCase();
-  const [y, m, d] = hoyISO().split('-');
+  const [y, m, d] = (p.fechaInicio || hoyISO()).split('-');
   const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   const L = '━━━━━━━━━━━━━━━';
   return `📄 *PAGARÉ*
@@ -1975,6 +2260,8 @@ function importarJSON(input) {
         personas: d.personas, prestamos: d.prestamos, pagos: d.pagos || []
       };
       saveDB(); render(); buzz(); toast('Respaldo restaurado');
+      _fotoCache.clear();
+precargarFotos();
     } catch (e) { input.value = ''; toast('Archivo inválido'); }
   };
   reader.readAsText(f);
@@ -2026,7 +2313,12 @@ function importarJSON(input) {
 /* =========================================================
    ARRANQUE
    ========================================================= */
-initLock();
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !$('#modal').classList.contains('hidden')) closeModal();
-});
+   (async function boot(){
+    await migrarFotosLegacy();
+    await precargarFotos();
+    initLock();
+  })();
+  
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('#modal').classList.contains('hidden')) closeModal();
+  });

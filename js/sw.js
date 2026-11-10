@@ -1,5 +1,5 @@
 /* PrestaMe Service Worker — v6 (network-first HTML + resilient install) */
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v10';
 const CACHE_STATIC  = 'prestame-static-'  + CACHE_VERSION;
 const CACHE_RUNTIME = 'prestame-runtime-' + CACHE_VERSION;
 
