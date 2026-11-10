@@ -376,16 +376,45 @@ window.addEventListener('beforeinstallprompt', (e) => {
   const card = document.getElementById('cardInstalar');
   if (card) card.style.display = 'block';
 });
+
+function esIOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function esStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         window.navigator.standalone === true;
+}
 async function instalarApp() {
+  
+
+  if (esIOS() && !esStandalone()){
+    return Swal.fire({
+      icon: 'info',
+      title: 'Instalar en iPhone/iPad',
+      html: `
+        <ol style="text-align:left;font-size:14px;line-height:1.7">
+          <li>Toca el botón <b>Compartir</b> <i class="fa-solid fa-arrow-up-from-bracket"></i> (abajo).</li>
+          <li>Desplázate y elige <b>Añadir a pantalla de inicio</b>.</li>
+          <li>Toca <b>Agregar</b>.</li>
+        </ol>`,
+      confirmButtonText: 'Entendido',
+      confirmButtonColor: '#2563eb'
+    });
+  }
+
   if (!deferredPrompt) {
     toast('Para instalar: abre el menú de tu navegador y busca "Añadir a pantalla de inicio"');
     return;
   }
+
   deferredPrompt.prompt();
   const { outcome } = await deferredPrompt.userChoice;
   if (outcome === 'accepted') {
     toast('¡App instalada!');
-    document.getElementById('cardInstalar').style.display = 'none';
+    const card = document.getElementById('cardInstalar');
+    if (card) card.style.display = 'none';
   }
   deferredPrompt = null;
 }
@@ -937,7 +966,7 @@ function viewAjustes() {
        </div>
      </div>
    
-     <div class="card" id="cardInstalar" style="display:none">
+    <div class="card" id="cardInstalar" style="${deferredPrompt || esIOS() ? '' : 'display:none'}">
        <h3 class="font-bold">Instalar App</h3>
        <p class="text-xs text-slate-500 my-1">Añade PrestaMe a tu pantalla de inicio para usarla sin internet.</p>
        <button class="btn primary w-full mt-2" onclick="instalarApp()"><i class="fa-solid fa-mobile-screen-button mr-1.5"></i>Instalar en mi teléfono</button>
@@ -1954,66 +1983,45 @@ function importarJSON(input) {
 /* =========================================================
    PWA
    ========================================================= */
-(function initPWA() {
-  const icon = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#2563eb"/><text x="256" y="330" font-size="240" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold">RD$</text></svg>');
-  const manifest = {
-    name: 'PrestaMe', short_name: 'Presta', start_url: '.', scope: '.',
-    display: 'standalone', background_color: '#0b1220', theme_color: '#0b1220',
-    lang: 'es', orientation: 'portrait',
-    icons: [{ src: icon, sizes: '512x512', type: 'image/svg+xml', purpose: 'any' }]
-  };
-  let link = document.querySelector('link[rel="manifest"]');
-  if (!link) {
-    link = document.createElement('link');
-    link.rel = 'manifest';
-    document.head.appendChild(link);
-  }
-  try { link.href = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest)); } catch (e) { }
-
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+   (function initPWA(){
+    if(!('serviceWorker' in navigator)) return;
+    if(!location.protocol.startsWith('http')) return;
+  
     navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
       .then(reg => {
-        // Chequeo periódico de actualizaciones (cada 60 min)
-        setInterval(() => reg.update().catch(() => { }), 60 * 60 * 1000);
-
-        // Si hay un SW esperando, activarlo
+        setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+  
         const activarSiEspera = () => {
           if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
         };
         activarSiEspera();
-
-        // Detectar cuando aparece una nueva versión
+  
         reg.addEventListener('updatefound', () => {
           const nuevo = reg.installing;
           if (!nuevo) return;
           nuevo.addEventListener('statechange', () => {
             if (nuevo.state === 'installed' && navigator.serviceWorker.controller) {
-              // Hay nueva versión lista → activar
               nuevo.postMessage({ type: 'SKIP_WAITING' });
             }
           });
         });
       })
-      .catch(() => { });
-
-    // Mensaje del SW → recargar
+      .catch(() => {});
+  
     navigator.serviceWorker.addEventListener('message', (e) => {
       if (e.data && e.data.type === 'SW_ACTIVATED') {
         toast('App actualizada');
         setTimeout(() => window.location.reload(), 800);
       }
     });
-
-    // Cuando el SW toma control (primera vez o tras update) → recargar
+  
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (refreshing) return;
       refreshing = true;
       window.location.reload();
     });
-  }
-})();
+  })();
 
 /* =========================================================
    ARRANQUE
