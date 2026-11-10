@@ -1310,10 +1310,16 @@ ${activo?`<button class="pay" data-action="pay"><i class="fa-solid fa-hand-holdi
      openModal(modalShell({
        title:per.nombre,
        body:`
-         <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px">
-           <span class="tag ${r.estado}">${r.estado}</span>
-           <button class="btn sm" onclick="generarPagare('${p.id}')"><i class="fa-solid fa-file-contract mr-1"></i>Pagaré</button>
-         </div>
+  <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+    <span class="tag ${r.estado}">${r.estado}</span>
+    <div style="display:flex;gap:6px">
+      <button class="btn sm" onclick="generarPagare('${p.id}')"><i class="fa-solid fa-file-contract mr-1"></i>Pagaré</button>
+      <button class="btn sm danger" onclick="borrarPrestamo('${p.id}')" title="Eliminar préstamo">
+        <i class="fa-solid fa-trash"></i>
+      </button>
+    </div>
+  </div>
+
          <div class="card">
            <div class="kv"><span>Capital</span><b>${money(r.cap)}</b></div>
            <div class="kv"><span>Interés</span><b>${money(r.interes)}</b></div>
